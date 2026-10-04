@@ -1,0 +1,18 @@
+@model Student
+@{
+    ViewData["Title"] = "Xóa sinh viên";
+}
+<h2 class="mb-3 text-danger">Xác nhận xóa sinh viên</h2>
+<div class="card p-4">
+    <p>Bạn có chắc chắn muốn xóa sinh viên sau không?</p>
+    <dl class="row">
+        <dt class="col-sm-3">Mã sinh viên</dt><dd class="col-sm-9">@Model.StudentCode</dd>
+        <dt class="col-sm-3">Họ và tên</dt><dd class="col-sm-9">@Model.FullName</dd>
+        <dt class="col-sm-3">Lớp</dt><dd class="col-sm-9">@Model.ClassRoom?.ClassName</dd>
+    </dl>
+    <form asp-action="Delete" method="post">
+        <input type="hidden" asp-for="Id" />
+        <button type="submit" class="btn btn-danger">Xóa</button>
+        <a class="btn btn-secondary" asp-action="Index">Hủy</a>
+    </form>
+</div>
