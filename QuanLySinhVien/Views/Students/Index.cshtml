@@ -29,6 +29,7 @@
         <table class="table table-hover align-middle mb-0">
             <thead class="table-light">
                 <tr>
+                    <th>Hình ảnh</th>
                     <th>Mã SV</th>
                     <th>Họ và tên</th>
                     <th>Ngày sinh</th>
@@ -41,7 +42,25 @@
             <tbody>
             @foreach (var s in Model)
             {
+                var first = s.Images.FirstOrDefault();
                 <tr>
+                    <td style="width:90px">
+                        @if (first != null)
+                        {
+                            <div class="position-relative d-inline-block">
+                                <img src="~/uploads/students/@first.FileName" alt="@s.FullName"
+                                     style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid #ddd" />
+                                @if (s.Images.Count > 1)
+                                {
+                                    <span class="badge bg-dark position-absolute bottom-0 end-0">+@(s.Images.Count - 1)</span>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <span class="text-muted small">Chưa có ảnh</span>
+                        }
+                    </td>
                     <td>@s.StudentCode</td>
                     <td>@s.FullName</td>
                     <td>@s.DateOfBirth.ToString("dd/MM/yyyy")</td>
@@ -57,7 +76,7 @@
             }
             @if (!Model.Any())
             {
-                <tr><td colspan="7" class="text-center text-muted py-4">Không có sinh viên nào.</td></tr>
+                <tr><td colspan="8" class="text-center text-muted py-4">Không có sinh viên nào.</td></tr>
             }
             </tbody>
         </table>

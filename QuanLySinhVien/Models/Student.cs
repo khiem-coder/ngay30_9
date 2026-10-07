@@ -46,4 +46,5 @@ public class Student
 
     [Display(Name = "Lớp")]
     public ClassRoom? ClassRoom { get; set; }
+    public ICollection<StudentImage> Images { get; set; } = new List<StudentImage>();
 }

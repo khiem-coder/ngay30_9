@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using QuanLySinhVien.Data;
+using QuanLySinhVien.Middlewares;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,6 +27,8 @@ if (!app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
+// Request logging and basic validation middleware: must be placed after routing and before authorization/controllers
+app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseAuthorization();
 
 app.MapControllerRoute(

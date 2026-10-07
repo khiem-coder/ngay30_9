@@ -9,14 +9,30 @@ namespace QuanLySinhVien.Controllers;
 public class StudentsController : Controller
 {
     private const int PageSize = 5;
+
+    // ===== Cấu hình upload =====
+    private static readonly string[] AllowedExtensions = { ".jpg", ".jpeg", ".png" };
+    private const long MaxFileSize = 2 * 1024 * 1024; // 2 MB / ảnh
+
     private readonly AppDbContext _context;
+    private readonly IWebHostEnvironment _env;
 
-    public StudentsController(AppDbContext context) => _context = context;
+    public StudentsController(AppDbContext context, IWebHostEnvironment env)
+    {
+        _context = context;
+        _env = env;
+    }
 
-    // GET: Students  (tìm kiếm + lọc theo lớp + phân trang)
+    // Thư mục lưu ảnh: wwwroot/uploads/students
+    private string UploadFolder => Path.Combine(_env.WebRootPath, "uploads", "students");
+
+    // GET: Students
     public async Task<IActionResult> Index(string? search, int? classId, int page = 1)
     {
-        var query = _context.Students.Include(s => s.ClassRoom).AsQueryable();
+        var query = _context.Students
+            .Include(s => s.ClassRoom)
+            .Include(s => s.Images)            // lấy kèm ảnh để hiển thị
+            .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -50,7 +66,10 @@ public class StudentsController : Controller
     public async Task<IActionResult> Details(int? id)
     {
         if (id == null) return NotFound();
-        var student = await _context.Students.Include(s => s.ClassRoom).FirstOrDefaultAsync(s => s.Id == id);
+        var student = await _context.Students
+            .Include(s => s.ClassRoom)
+            .Include(s => s.Images)
+            .FirstOrDefaultAsync(s => s.Id == id);
         return student == null ? NotFound() : View(student);
     }
 
@@ -62,12 +81,18 @@ public class StudentsController : Controller
     }
 
     // POST: Students/Create
+    // "images" phải trùng với name="images" của <input type="file" multiple> trong Create.cshtml
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> Create([Bind("StudentCode,FullName,DateOfBirth,Gender,Email,Phone,Address,ClassRoomId")] Student student)
+    public async Task<IActionResult> Create(
+        [Bind("StudentCode,FullName,DateOfBirth,Gender,Email,Phone,Address,ClassRoomId")] Student student,
+        List<IFormFile>? images)
     {
         await ValidateUniqueCodeAsync(student);
+        await ValidateImagesAsync(images);          // sai định dạng -> thêm lỗi vào ModelState
+
         if (ModelState.IsValid)
         {
+            await SaveImagesAsync(student, images); // lưu file + gắn vào student.Images
             _context.Add(student);
             await _context.SaveChangesAsync();
             TempData["Success"] = "Thêm sinh viên thành công!";
@@ -125,14 +150,95 @@ public class StudentsController : Controller
     [HttpPost, ActionName("Delete"), ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteConfirmed(int id)
     {
-        var student = await _context.Students.FindAsync(id);
+        var student = await _context.Students.Include(s => s.Images).FirstOrDefaultAsync(s => s.Id == id);
         if (student != null)
         {
-            _context.Students.Remove(student);
+            foreach (var img in student.Images) DeleteFile(img.FileName); // xóa file ảnh trên server
+            _context.Students.Remove(student);                           // cascade xóa các dòng StudentImages
             await _context.SaveChangesAsync();
             TempData["Success"] = "Đã xóa sinh viên.";
         }
         return RedirectToAction(nameof(Index));
+    }
+
+    // =====================================================================
+    //                         CÁC HÀM XỬ LÝ UPLOAD
+    // =====================================================================
+
+    /// Kiểm tra từng file: đuôi .jpg/.jpeg/.png, dung lượng, và nội dung thật sự là JPG/PNG.
+    private async Task ValidateImagesAsync(List<IFormFile>? files)
+    {
+        if (files == null) return;
+
+        foreach (var f in files)
+        {
+            if (f.Length == 0) continue; // ô chọn file để trống
+
+            var ext = Path.GetExtension(f.FileName).ToLowerInvariant();
+            if (!AllowedExtensions.Contains(ext))
+            {
+                ModelState.AddModelError("images", $"File \"{f.FileName}\" không hợp lệ. Chỉ cho phép ảnh .jpg hoặc .png.");
+                continue;
+            }
+            if (f.Length > MaxFileSize)
+            {
+                ModelState.AddModelError("images", $"File \"{f.FileName}\" vượt quá 2 MB.");
+                continue;
+            }
+            if (!await HasValidSignatureAsync(f))
+            {
+                ModelState.AddModelError("images", $"File \"{f.FileName}\" không phải ảnh JPG/PNG hợp lệ.");
+            }
+        }
+    }
+
+    /// Đọc vài byte đầu file để chắc chắn đúng là ảnh (chặn đổi đuôi .exe -> .jpg).
+    private static async Task<bool> HasValidSignatureAsync(IFormFile file)
+    {
+        var header = new byte[8];
+        await using var stream = file.OpenReadStream();
+        int read = await stream.ReadAsync(header, 0, header.Length);
+        if (read < 4) return false;
+
+        bool isPng = header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47;
+        bool isJpg = header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF;
+        return isPng || isJpg;
+    }
+
+    /// Lưu file xuống ổ đĩa, trả về danh sách tên file (đổi tên bằng Guid để không trùng).
+    private async Task<List<string>> SaveFilesAsync(List<IFormFile>? files)
+    {
+        var names = new List<string>();
+        if (files == null) return names;
+
+        Directory.CreateDirectory(UploadFolder);
+
+        foreach (var f in files)
+        {
+            if (f.Length == 0) continue;
+
+            var ext = Path.GetExtension(f.FileName).ToLowerInvariant();
+            var fileName = $"{Guid.NewGuid():N}{ext}";
+            var path = Path.Combine(UploadFolder, fileName);
+
+            await using var fs = new FileStream(path, FileMode.Create);
+            await f.CopyToAsync(fs);
+            names.Add(fileName);
+        }
+        return names;
+    }
+
+    /// Lưu file rồi gắn vào student.Images.
+    private async Task SaveImagesAsync(Student student, List<IFormFile>? files)
+    {
+        foreach (var name in await SaveFilesAsync(files))
+            student.Images.Add(new StudentImage { FileName = name });
+    }
+
+    private void DeleteFile(string fileName)
+    {
+        var path = Path.Combine(UploadFolder, Path.GetFileName(fileName));
+        if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
     }
 
     private async Task LoadClassesAsync(int? selected = null)

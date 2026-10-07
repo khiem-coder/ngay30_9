@@ -9,7 +9,7 @@ public class AppDbContext : DbContext
 
     public DbSet<Student> Students => Set<Student>();
     public DbSet<ClassRoom> ClassRooms => Set<ClassRoom>();
-
+    public DbSet<StudentImage> StudentImages => Set<StudentImage>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Student>()

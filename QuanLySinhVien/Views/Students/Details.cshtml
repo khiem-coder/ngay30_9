@@ -13,6 +13,25 @@
         <dt class="col-sm-3">@Html.DisplayNameFor(m => m.Phone)</dt><dd class="col-sm-9">@Model.Phone</dd>
         <dt class="col-sm-3">@Html.DisplayNameFor(m => m.Address)</dt><dd class="col-sm-9">@Model.Address</dd>
         <dt class="col-sm-3">Lớp</dt><dd class="col-sm-9">@Model.ClassRoom?.ClassName (@Model.ClassRoom?.Major)</dd>
+        <dt class="col-sm-3">Hình ảnh</dt>
+        <dd class="col-sm-9">
+            @if (Model.Images.Any())
+            {
+                <div class="d-flex flex-wrap gap-2">
+                    @foreach (var img in Model.Images)
+                    {
+                        <a href="~/uploads/students/@img.FileName" target="_blank">
+                            <img src="~/uploads/students/@img.FileName" alt="@Model.FullName"
+                                 style="width:120px;height:120px;object-fit:cover;border-radius:6px;border:1px solid #ddd" />
+                        </a>
+                    }
+                </div>
+            }
+            else
+            {
+                <span class="text-muted">Chưa có ảnh</span>
+            }
+        </dd>
     </dl>
     <div class="mt-4">
         <a class="btn btn-warning" asp-action="Edit" asp-route-id="@Model.Id">Sửa</a>
